@@ -66,7 +66,7 @@
         name: "{{ nic_name }}"
         virtual_network: "{{ vnet_name }}"
         subnet: "{{ subnet_name }}"
-        security_group: false
+        create_with_security_group: false
         ip_configurations:
           - name: ipconfig1
             primary: true
