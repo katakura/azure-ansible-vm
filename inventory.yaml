@@ -1,0 +1,17 @@
+all:
+  children:
+    azurerm:
+      hosts:
+        azure:
+          ansible_host: localhost
+          ansible_connection: local
+        azure_vms:
+          ansible_host: "ktkrvmtest.{{ location }}.cloudapp.azure.com"
+          ansible_connection: ssh
+          ansible_user: "{{ admin_user }}"
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+      vars:
+        resource_group: rg-ansible
+        location: japaneast
+        admin_user: yotan
+        ssh_public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"

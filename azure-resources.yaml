@@ -1,0 +1,110 @@
+---
+- hosts: azure
+  vars:
+    vnet_name: vnet-test
+    subnet_name: snet-vms
+    nsg_name: nsg-snet-vms
+    pip_name: ip-vm-test
+    nic_name: nic-vm-test
+    vm_name: vm-test
+    dns_name_label: ktkrvmtest
+  tasks:
+    - name: Create a resource group
+      azure_rm_resourcegroup:
+        name: "{{ resource_group }}"
+        location: "{{ location }}"
+        state: present
+
+    - name: Create security group
+      azure_rm_securitygroup:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nsg_name }}"
+        purge_rules: yes
+        rules:
+          - name: ALLOW_SSH
+            protocol: Tcp
+            destination_port_range: 22
+            access: Allow
+            priority: 100
+            direction: Inbound
+          - name: ALLOW_HTTP
+            protocol: Tcp
+            destination_port_range: 80
+            access: Allow
+            priority: 110
+            direction: Inbound
+        state: present
+
+    - name: Create virtual network
+      azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vnet_name }}"
+        address_prefixes: "10.10.0.0/16"
+        state: present
+
+    - name: Add subnet
+      azure_rm_subnet:
+        resource_group: "{{ resource_group }}"
+        name: "{{ subnet_name }}"
+        address_prefix: "10.10.0.0/24"
+        virtual_network: "{{ vnet_name }}"
+        security_group_name: "{{ nsg_name }}"
+        state: present
+
+    - name: Create public IP
+      azure_rm_publicipaddress:
+        resource_group: "{{ resource_group }}"
+        name: "{{ pip_name }}"
+        allocation_method: Static
+        domain_name_label: "{{ dns_name_label }}"
+        sku: Standard
+        state: present
+
+    - name: Create network interface
+      azure_rm_networkinterface:
+        resource_group: "{{ resource_group }}"
+        name: "{{ nic_name }}"
+        virtual_network: "{{ vnet_name }}"
+        subnet: "{{ subnet_name }}"
+        security_group: false
+        ip_configurations:
+          - name: ipconfig1
+            primary: true
+            private_ip_allocation_method: Dynamic
+            public_ip_address_name: "{{ pip_name }}"
+        state: present
+
+    - name: Create virtual machine
+      azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vm_name }}"
+        vm_size: Standard_DS1_v2
+        admin_username: "{{ admin_user }}"
+        ssh_password_enabled: false
+        ssh_public_keys:
+          - path: "/home/{{ admin_user }}/.ssh/authorized_keys"
+            key_data: "{{ ssh_public_key }}"
+        network_interfaces: "{{ nic_name }}"
+        image:
+          offer: 0001-com-ubuntu-server-jammy
+          publisher: Canonical
+          sku: 22_04-lts-gen2
+          version: latest
+        managed_disk_type: Standard_LRS
+        state: present
+
+- hosts: azure_vms
+  tasks:
+    - name: Wait for SSH to come up
+      wait_for:
+        port: 22
+        delay: 10
+        timeout: 300
+        state: started
+      delegate_to: localhost
+
+    - name: Install Nginx
+      apt:
+        name: nginx 
+        state: latest
+      become: true
